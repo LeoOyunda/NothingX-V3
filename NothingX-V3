@@ -1,0 +1,192 @@
+-- NOTHING X V3 ULTIMATE MENU
+-- Full UI: Fly, Noclip, Godmode, Speed, Jump, Teleport
+-- Hem PC hem Mobile uyumlu
+
+-- Eski UI varsa sil
+if game.CoreGui:FindFirstChild("NothingX_Menu") then
+    game.CoreGui:FindFirstChild("NothingX_Menu"):Destroy()
+end
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local TS = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local HRP = Character:WaitForChild("HumanoidRootPart")
+
+-- GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "NothingX_Menu"
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ResetOnSpawn = false
+
+-- Toggle Button (sağ alt)
+local Toggle = Instance.new("TextButton", ScreenGui)
+Toggle.Size = UDim2.new(0, 100, 0, 40)
+Toggle.Position = UDim2.new(1, -110, 1, -50)
+Toggle.Text = "NothingX V3"
+Toggle.Font = Enum.Font.GothamBold
+Toggle.TextSize = 16
+Toggle.TextColor3 = Color3.new(1,1,1)
+Toggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
+Instance.new("UICorner", Toggle).CornerRadius = UDim.new(0,8)
+
+-- Ana Menü
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size = UDim2.new(0, 350, 0, 300)
+Frame.Position = UDim2.new(0.5, -175, 0.5, -150)
+Frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+Frame.Visible = false
+Instance.new("UICorner", Frame).CornerRadius = UDim.new(0,12)
+
+-- Gölge
+local Shadow = Instance.new("ImageLabel", Frame)
+Shadow.AnchorPoint = Vector2.new(0.5,0.5)
+Shadow.Position = UDim2.new(0.5,0,0.5,0)
+Shadow.Size = UDim2.new(1.2,0,1.2,0)
+Shadow.ZIndex = -1
+Shadow.BackgroundTransparency = 1
+Shadow.Image = "rbxassetid://1316045217"
+Shadow.ImageTransparency = 0.5
+
+-- Başlık
+local Title = Instance.new("TextLabel", Frame)
+Title.Size = UDim2.new(1,0,0,40)
+Title.Text = "NOTHING X V3"
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 22
+Title.TextColor3 = Color3.new(1,1,1)
+Title.BackgroundTransparency = 1
+
+-- Container
+local ScrollingFrame = Instance.new("ScrollingFrame", Frame)
+ScrollingFrame.Size = UDim2.new(1,-20,1,-50)
+ScrollingFrame.Position = UDim2.new(0,10,0,45)
+ScrollingFrame.BackgroundTransparency = 1
+ScrollingFrame.ScrollBarThickness = 6
+local UIList = Instance.new("UIListLayout", ScrollingFrame)
+UIList.Padding = UDim.new(0,6)
+
+-- Buton yapıcı
+local function makeToggle(name, callback)
+    local Btn = Instance.new("TextButton", ScrollingFrame)
+    Btn.Size = UDim2.new(1,0,0,40)
+    Btn.Text = name.." [OFF]"
+    Btn.Font = Enum.Font.Gotham
+    Btn.TextSize = 18
+    Btn.TextColor3 = Color3.new(1,1,1)
+    Btn.BackgroundColor3 = Color3.fromRGB(45,45,45)
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0,8)
+    local state = false
+    Btn.MouseButton1Click:Connect(function()
+        state = not state
+        Btn.Text = name.." ["..(state and "ON" or "OFF").."]"
+        callback(state)
+    end)
+end
+
+-- Value Slider (Speed, Jump)
+local function makeValue(name, default, callback)
+    local Box = Instance.new("TextBox", ScrollingFrame)
+    Box.Size = UDim2.new(1,0,0,40)
+    Box.Text = name..": "..default
+    Box.Font = Enum.Font.Gotham
+    Box.TextSize = 18
+    Box.TextColor3 = Color3.new(1,1,1)
+    Box.BackgroundColor3 = Color3.fromRGB(45,45,45)
+    Instance.new("UICorner", Box).CornerRadius = UDim.new(0,8)
+    Box.FocusLost:Connect(function()
+        local val = tonumber(Box.Text:match("%d+"))
+        if val then
+            Box.Text = name..": "..val
+            callback(val)
+        else
+            Box.Text = name..": "..default
+        end
+    end)
+end
+
+-- Fly
+local flying = false
+makeToggle("Fly", function(on)
+    flying = on
+    if flying then
+        local bv = Instance.new("BodyVelocity", HRP)
+        bv.Name = "FlyVel"
+        bv.MaxForce = Vector3.new(1e5,1e5,1e5)
+        bv.Velocity = Vector3.zero
+        while flying and bv.Parent do
+            task.wait()
+            local dir = Vector3.zero
+            if UIS:IsKeyDown(Enum.KeyCode.W) then dir = dir + (HRP.CFrame.LookVector) end
+            if UIS:IsKeyDown(Enum.KeyCode.S) then dir = dir - (HRP.CFrame.LookVector) end
+            if UIS:IsKeyDown(Enum.KeyCode.A) then dir = dir - (HRP.CFrame.RightVector) end
+            if UIS:IsKeyDown(Enum.KeyCode.D) then dir = dir + (HRP.CFrame.RightVector) end
+            bv.Velocity = dir * 50
+        end
+        bv:Destroy()
+    end
+end)
+
+-- Noclip
+local noclip = false
+makeToggle("Noclip", function(on)
+    noclip = on
+    game:GetService("RunService").Stepped:Connect(function()
+        if noclip and Character then
+            for _,v in pairs(Character:GetDescendants()) do
+                if v:IsA("BasePart") and v.CanCollide then
+                    v.CanCollide = false
+                end
+            end
+        end
+    end)
+end)
+
+-- GodMode
+makeToggle("GodMode", function(on)
+    if on then
+        Humanoid.Health = math.huge
+        Humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+            if Humanoid.Health < 1 then Humanoid.Health = math.huge end
+        end)
+    else
+        Humanoid.Health = Humanoid.MaxHealth
+    end
+end)
+
+-- Speed
+makeValue("Speed", 16, function(val)
+    Humanoid.WalkSpeed = val
+end)
+
+-- Jump
+makeValue("Jump", 50, function(val)
+    Humanoid.JumpPower = val
+end)
+
+-- Teleport
+local Box = Instance.new("TextBox", ScrollingFrame)
+Box.Size = UDim2.new(1,0,0,40)
+Box.Text = "Teleport: PlayerName"
+Box.Font = Enum.Font.Gotham
+Box.TextSize = 18
+Box.TextColor3 = Color3.new(1,1,1)
+Box.BackgroundColor3 = Color3.fromRGB(45,45,45)
+Instance.new("UICorner", Box).CornerRadius = UDim.new(0,8)
+Box.FocusLost:Connect(function()
+    local name = Box.Text:gsub("Teleport: ","")
+    local target = Players:FindFirstChild(name)
+    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+        HRP.CFrame = target.Character.HumanoidRootPart.CFrame + Vector3.new(0,3,0)
+        Box.Text = "Teleported to "..name
+    else
+        Box.Text = "Player not found"
+    end
+end)
+
+-- Toggle menü aç/kapat
+Toggle.MouseButton1Click:Connect(function()
+    Frame.Visible = not Frame.Visible
+end)
