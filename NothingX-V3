@@ -1,192 +1,256 @@
--- NOTHING X V3 ULTIMATE MENU
--- Full UI: Fly, Noclip, Godmode, Speed, Jump, Teleport
--- Hem PC hem Mobile uyumlu
-
--- Eski UI varsa sil
-if game.CoreGui:FindFirstChild("NothingX_Menu") then
-    game.CoreGui:FindFirstChild("NothingX_Menu"):Destroy()
-end
+-- LocalScript (place in StarterPlayerScripts)
+-- FULL UI + client logic for Free Reward (creates UI at runtime)
+-- Configurable values below
 
 local Players = game:GetService("Players")
-local UIS = game:GetService("UserInputService")
-local TS = game:GetService("TweenService")
-local LocalPlayer = Players.LocalPlayer
-local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local Humanoid = Character:WaitForChild("Humanoid")
-local HRP = Character:WaitForChild("HumanoidRootPart")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Player = Players.LocalPlayer
+local playerGui = Player:WaitForChild("PlayerGui")
 
--- GUI
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "NothingX_Menu"
-ScreenGui.Parent = game.CoreGui
-ScreenGui.ResetOnSpawn = false
+local CONFIG = {
+    AutoOpenOnJoin = true,            -- oyun açınca menu otomatik açılsın mı
+    ForceFullMenu = true,             -- menüyü büyük/ortalanmış yap
+    FullSize = UDim2.new(0.92,0,0.84,0),
+    FullPos = UDim2.new(0.04,0,0.08,0),
+    WatchAdSeconds = 5,               -- "reklam izleme" simülasyon süresi
+    RewardAmount = 100,               -- sunucudan istenecek ödül miktarı (sunucu da bu değeri kullanacak)
+    RemoteEventName = "ClaimFreeReward" -- ReplicatedStorage içindeki RemoteEvent adı
+}
 
--- Toggle Button (sağ alt)
-local Toggle = Instance.new("TextButton", ScreenGui)
-Toggle.Size = UDim2.new(0, 100, 0, 40)
-Toggle.Position = UDim2.new(1, -110, 1, -50)
-Toggle.Text = "NothingX V3"
-Toggle.Font = Enum.Font.GothamBold
-Toggle.TextSize = 16
-Toggle.TextColor3 = Color3.new(1,1,1)
-Toggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
-Instance.new("UICorner", Toggle).CornerRadius = UDim.new(0,8)
-
--- Ana Menü
-local Frame = Instance.new("Frame", ScreenGui)
-Frame.Size = UDim2.new(0, 350, 0, 300)
-Frame.Position = UDim2.new(0.5, -175, 0.5, -150)
-Frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
-Frame.Visible = false
-Instance.new("UICorner", Frame).CornerRadius = UDim.new(0,12)
-
--- Gölge
-local Shadow = Instance.new("ImageLabel", Frame)
-Shadow.AnchorPoint = Vector2.new(0.5,0.5)
-Shadow.Position = UDim2.new(0.5,0,0.5,0)
-Shadow.Size = UDim2.new(1.2,0,1.2,0)
-Shadow.ZIndex = -1
-Shadow.BackgroundTransparency = 1
-Shadow.Image = "rbxassetid://1316045217"
-Shadow.ImageTransparency = 0.5
-
--- Başlık
-local Title = Instance.new("TextLabel", Frame)
-Title.Size = UDim2.new(1,0,0,40)
-Title.Text = "NOTHING X V3"
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 22
-Title.TextColor3 = Color3.new(1,1,1)
-Title.BackgroundTransparency = 1
-
--- Container
-local ScrollingFrame = Instance.new("ScrollingFrame", Frame)
-ScrollingFrame.Size = UDim2.new(1,-20,1,-50)
-ScrollingFrame.Position = UDim2.new(0,10,0,45)
-ScrollingFrame.BackgroundTransparency = 1
-ScrollingFrame.ScrollBarThickness = 6
-local UIList = Instance.new("UIListLayout", ScrollingFrame)
-UIList.Padding = UDim.new(0,6)
-
--- Buton yapıcı
-local function makeToggle(name, callback)
-    local Btn = Instance.new("TextButton", ScrollingFrame)
-    Btn.Size = UDim2.new(1,0,0,40)
-    Btn.Text = name.." [OFF]"
-    Btn.Font = Enum.Font.Gotham
-    Btn.TextSize = 18
-    Btn.TextColor3 = Color3.new(1,1,1)
-    Btn.BackgroundColor3 = Color3.fromRGB(45,45,45)
-    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0,8)
-    local state = false
-    Btn.MouseButton1Click:Connect(function()
-        state = not state
-        Btn.Text = name.." ["..(state and "ON" or "OFF").."]"
-        callback(state)
-    end)
-end
-
--- Value Slider (Speed, Jump)
-local function makeValue(name, default, callback)
-    local Box = Instance.new("TextBox", ScrollingFrame)
-    Box.Size = UDim2.new(1,0,0,40)
-    Box.Text = name..": "..default
-    Box.Font = Enum.Font.Gotham
-    Box.TextSize = 18
-    Box.TextColor3 = Color3.new(1,1,1)
-    Box.BackgroundColor3 = Color3.fromRGB(45,45,45)
-    Instance.new("UICorner", Box).CornerRadius = UDim.new(0,8)
-    Box.FocusLost:Connect(function()
-        local val = tonumber(Box.Text:match("%d+"))
-        if val then
-            Box.Text = name..": "..val
-            callback(val)
-        else
-            Box.Text = name..": "..default
+-- Helper: create GUI elements with defaults
+local function Create(class, props)
+    local obj = Instance.new(class)
+    if props then
+        for k,v in pairs(props) do
+            if k ~= "Parent" then obj[k] = v end
         end
-    end)
-end
-
--- Fly
-local flying = false
-makeToggle("Fly", function(on)
-    flying = on
-    if flying then
-        local bv = Instance.new("BodyVelocity", HRP)
-        bv.Name = "FlyVel"
-        bv.MaxForce = Vector3.new(1e5,1e5,1e5)
-        bv.Velocity = Vector3.zero
-        while flying and bv.Parent do
-            task.wait()
-            local dir = Vector3.zero
-            if UIS:IsKeyDown(Enum.KeyCode.W) then dir = dir + (HRP.CFrame.LookVector) end
-            if UIS:IsKeyDown(Enum.KeyCode.S) then dir = dir - (HRP.CFrame.LookVector) end
-            if UIS:IsKeyDown(Enum.KeyCode.A) then dir = dir - (HRP.CFrame.RightVector) end
-            if UIS:IsKeyDown(Enum.KeyCode.D) then dir = dir + (HRP.CFrame.RightVector) end
-            bv.Velocity = dir * 50
-        end
-        bv:Destroy()
+        if props.Parent then obj.Parent = props.Parent end
     end
-end)
+    return obj
+end
 
--- Noclip
-local noclip = false
-makeToggle("Noclip", function(on)
-    noclip = on
-    game:GetService("RunService").Stepped:Connect(function()
-        if noclip and Character then
-            for _,v in pairs(Character:GetDescendants()) do
-                if v:IsA("BasePart") and v.CanCollide then
-                    v.CanCollide = false
-                end
+-- Ensure we have a ScreenGui
+local screenGui = Create("ScreenGui", {Name = "AutoFreeRewardGui", ResetOnSpawn = false, Parent = playerGui})
+
+-- Left vertical container with FREE button
+local leftFrame = Create("Frame", {
+    Name = "LeftBar",
+    Parent = screenGui,
+    Size = UDim2.new(0, 80, 0.45, 0),
+    Position = UDim2.new(0, 8, 0.18, 0),
+    BackgroundTransparency = 1,
+})
+local list = Create("UIListLayout", {Parent = leftFrame, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0,8)})
+list.HorizontalAlignment = Enum.HorizontalAlignment.Center
+list.VerticalAlignment = Enum.VerticalAlignment.Top
+
+local function makeSideButton(text, order)
+    local btn = Create("TextButton", {
+        Name = text.."Btn",
+        Parent = leftFrame,
+        Size = UDim2.new(1,0,0,56),
+        BackgroundColor3 = Color3.fromRGB(32, 32, 32),
+        TextColor3 = Color3.fromRGB(255,255,255),
+        Text = text,
+        Font = Enum.Font.SourceSansBold,
+        TextSize = 20,
+        AutoButtonColor = true,
+    })
+    btn.LayoutOrder = order or 1
+    return btn
+end
+
+local freeButton = makeSideButton("FREE", 1)
+local extraBtn1 = makeSideButton("Menu", 2) -- placeholder buttons
+local extraBtn2 = makeSideButton("Props", 3)
+
+-- Main reward menu (hidden by default)
+local menuFrame = Create("Frame", {
+    Name = "FreeRewardMenu",
+    Parent = screenGui,
+    Size = UDim2.new(0.88, 0, 0.72, 0),
+    Position = UDim2.new(0.06, 0, 0.14, 0),
+    BackgroundColor3 = Color3.fromRGB(230,230,230),
+    Visible = false,
+    AnchorPoint = Vector2.new(0,0),
+})
+menuFrame.BorderSizePixel = 0
+menuFrame.ZIndex = 50
+
+-- Header
+local header = Create("Frame", {
+    Parent = menuFrame,
+    Size = UDim2.new(1,0,0,64),
+    BackgroundTransparency = 0.06,
+    BackgroundColor3 = Color3.fromRGB(20,20,20),
+})
+local headerLabel = Create("TextLabel", {
+    Parent = header,
+    Size = UDim2.new(0.95,0,1,0),
+    Position = UDim2.new(0.025,0,0,0),
+    BackgroundTransparency = 1,
+    Text = "Watch Ad -> Free Reward!",
+    TextColor3 = Color3.fromRGB(255,255,255),
+    Font = Enum.Font.SourceSansBold,
+    TextSize = 28,
+    TextXAlignment = Enum.TextXAlignment.Left,
+})
+
+local closeBtn = Create("TextButton", {
+    Parent = header,
+    Size = UDim2.new(0,48,0,48),
+    Position = UDim2.new(1,-56,0,8),
+    BackgroundColor3 = Color3.fromRGB(200,50,50),
+    Text = "X",
+    TextColor3 = Color3.fromRGB(255,255,255),
+    Font = Enum.Font.SourceSansBold,
+    TextSize = 24,
+})
+closeBtn.ZIndex = 60
+
+-- Content area with grid of sample items
+local content = Create("Frame", {
+    Parent = menuFrame,
+    Size = UDim2.new(1, -24, 1, -120),
+    Position = UDim2.new(0,12,0,76),
+    BackgroundTransparency = 1,
+})
+local scrolling = Create("ScrollingFrame", {
+    Parent = content,
+    Size = UDim2.new(1,0,1,0),
+    CanvasSize = UDim2.new(0,0,0,0),
+    BackgroundTransparency = 1,
+    ScrollBarThickness = 6,
+})
+local grid = Create("UIGridLayout", {Parent = scrolling})
+grid.CellSize = UDim2.new(0,120,0,120)
+grid.CellPadding = UDim2.new(0,12,0,12)
+grid.FillDirection = Enum.FillDirection.Horizontal
+
+-- Sample items (placeholders)
+for i=1,16 do
+    local it = Create("Frame", {Parent = scrolling, Size = UDim2.new(0,120,0,120), BackgroundColor3 = Color3.fromRGB(245,245,245)})
+    local img = Create("ImageLabel", {Parent = it, Size = UDim2.new(1,0,0.75,0), BackgroundTransparency = 1, Image = ""})
+    local lbl = Create("TextLabel", {Parent = it, Size = UDim2.new(1,0,0.25,0), Position = UDim2.new(0,0,0.75,0), BackgroundTransparency = 1, Text = "Item "..i, TextColor3 = Color3.fromRGB(30,30,30)})
+end
+
+-- Footer with Watch Ad button and status
+local footer = Create("Frame", {
+    Parent = menuFrame,
+    Size = UDim2.new(1,0,0,56),
+    Position = UDim2.new(0,0,1,-56),
+    BackgroundTransparency = 0.05,
+})
+local watchBtn = Create("TextButton", {
+    Parent = footer,
+    Size = UDim2.new(0.5, -16, 1, -12),
+    Position = UDim2.new(0.5,8,0,6),
+    Text = "Watch Ad / Claim",
+    BackgroundColor3 = Color3.fromRGB(50,150,250),
+    TextColor3 = Color3.fromRGB(255,255,255),
+    Font = Enum.Font.SourceSansBold,
+    TextSize = 20,
+})
+watchBtn.AnchorPoint = Vector2.new(0,0)
+
+local statusLabel = Create("TextLabel", {
+    Parent = footer,
+    Size = UDim2.new(0.48, -16, 1, -12),
+    Position = UDim2.new(0, 8, 0, 6),
+    BackgroundTransparency = 1,
+    Text = "Ready",
+    TextColor3 = Color3.fromRGB(30,30,30),
+    Font = Enum.Font.SourceSans,
+    TextSize = 18,
+    TextXAlignment = Enum.TextXAlignment.Left,
+})
+
+-- Utility: adjust full size if requested
+local function MakeMenuFull()
+    if CONFIG.ForceFullMenu then
+        menuFrame.Size = CONFIG.FullSize
+        menuFrame.Position = CONFIG.FullPos
+        menuFrame.AnchorPoint = Vector2.new(0,0)
+    end
+end
+
+-- Replicated event hookup
+local remoteEvent = ReplicatedStorage:FindFirstChild(CONFIG.RemoteEventName)
+
+-- Listen for server response (optional, server will send feedback)
+if remoteEvent then
+    remoteEvent.OnClientEvent:Connect(function(success, message, newTotal)
+        if success then
+            statusLabel.Text = message or "Reward claimed!"
+            -- Optional: show new total if server returned
+            if newTotal then
+                statusLabel.Text = statusLabel.Text.." Total: "..tostring(newTotal)
             end
+        else
+            statusLabel.Text = message or "Claim failed."
         end
+        watchBtn.Active = true
+        watchBtn.Text = "Watch Ad / Claim"
     end)
-end)
+end
 
--- GodMode
-makeToggle("GodMode", function(on)
-    if on then
-        Humanoid.Health = math.huge
-        Humanoid:GetPropertyChangedSignal("Health"):Connect(function()
-            if Humanoid.Health < 1 then Humanoid.Health = math.huge end
-        end)
-    else
-        Humanoid.Health = Humanoid.MaxHealth
+-- Watch ad simulation + request reward
+local function WatchAndClaim()
+    watchBtn.Active = false
+    watchBtn.Text = "Watching..."
+    statusLabel.Text = "Watching ad..."
+    for i = CONFIG.WatchAdSeconds, 1, -1 do
+        watchBtn.Text = "Watching... "..tostring(i)
+        wait(1)
     end
-end)
-
--- Speed
-makeValue("Speed", 16, function(val)
-    Humanoid.WalkSpeed = val
-end)
-
--- Jump
-makeValue("Jump", 50, function(val)
-    Humanoid.JumpPower = val
-end)
-
--- Teleport
-local Box = Instance.new("TextBox", ScrollingFrame)
-Box.Size = UDim2.new(1,0,0,40)
-Box.Text = "Teleport: PlayerName"
-Box.Font = Enum.Font.Gotham
-Box.TextSize = 18
-Box.TextColor3 = Color3.new(1,1,1)
-Box.BackgroundColor3 = Color3.fromRGB(45,45,45)
-Instance.new("UICorner", Box).CornerRadius = UDim.new(0,8)
-Box.FocusLost:Connect(function()
-    local name = Box.Text:gsub("Teleport: ","")
-    local target = Players:FindFirstChild(name)
-    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-        HRP.CFrame = target.Character.HumanoidRootPart.CFrame + Vector3.new(0,3,0)
-        Box.Text = "Teleported to "..name
-    else
-        Box.Text = "Player not found"
+    watchBtn.Text = "Claiming..."
+    statusLabel.Text = "Requesting reward..."
+    -- If remote event exists, fire server to grant reward (server handles cooldown)
+    if not remoteEvent then
+        -- Local fallback: modify leaderstats (best-effort, insecure)
+        statusLabel.Text = "No server event found. Giving local reward (debug only)."
+        local leader = Player:FindFirstChild("leaderstats")
+        if not leader then
+            leader = Instance.new("Folder")
+            leader.Name = "leaderstats"
+            leader.Parent = Player
+        end
+        local coins = leader:FindFirstChild("Coins")
+        if not coins then
+            coins = Instance.new("IntValue")
+            coins.Name = "Coins"
+            coins.Value = 0
+            coins.Parent = leader
+        end
+        coins.Value = coins.Value + CONFIG.RewardAmount
+        statusLabel.Text = "Reward given locally: +"..CONFIG.RewardAmount
+        watchBtn.Active = true
+        watchBtn.Text = "Watch Ad / Claim"
+        return
     end
+    -- FireServer with requested amount (server will validate/cooldown)
+    remoteEvent:FireServer(CONFIG.RewardAmount)
+end
+
+-- Connections
+freeButton.MouseButton1Click:Connect(function()
+    menuFrame.Visible = true
+    MakeMenuFull()
+end)
+closeBtn.MouseButton1Click:Connect(function()
+    menuFrame.Visible = false
+end)
+watchBtn.MouseButton1Click:Connect(function()
+    -- prevent double taps
+    if not watchBtn.Active then return end
+    WatchAndClaim()
 end)
 
--- Toggle menü aç/kapat
-Toggle.MouseButton1Click:Connect(function()
-    Frame.Visible = not Frame.Visible
-end)
+-- Auto open on join if requested
+if CONFIG.AutoOpenOnJoin then
+    -- tiny delay to let PlayerGui fully load
+    task.delay(0.25, function()
+        menuFrame.Visible = true
+        MakeMenuFull()
+    end)
+end
